@@ -1,4 +1,5 @@
-const SERVER_URL = 'http://localhost:3000';
+// שרת הייצור בענן. לפיתוח מקומי החלף ל: 'http://localhost:3000'
+const SERVER_URL = 'https://yad2-reviews-server.onrender.com';
 let currentUrl = window.location.href;
 
 // 1. זיהוי אמין למעברי עמודים באתרי SPA (ללא ריענון מלא)
@@ -10,6 +11,11 @@ setInterval(() => {
 }, 800);
 
 let feedScanInterval;
+
+// מטמון לתוצאות batch-check כדי לא להציף את השרת בסריקות חוזרות
+let lastBatchSignature = '';
+let lastBatchResult = {};
+let lastBatchTime = 0;
 
 function init() {
     clearInterval(feedScanInterval); 
@@ -52,18 +58,27 @@ async function injectFeedPage() {
     console.log(`[בקרת רכבים] נמצאו ${itemIds.length} מזהים ייחודיים בפיד.`);
 
     let publicReviews = {};
-    
-    try {
-        const response = await fetch(`${SERVER_URL}/api/batch-check`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ itemIds })
-        });
-        if (response.ok) {
-            publicReviews = await response.json();
+
+    // שליחת batch-check רק כשרשימת המודעות השתנתה או שעברה דקה - חוסך מאות בקשות לשרת
+    const signature = itemIds.slice().sort().join(',');
+    if (signature === lastBatchSignature && Date.now() - lastBatchTime < 60000) {
+        publicReviews = lastBatchResult;
+    } else {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/batch-check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itemIds })
+            });
+            if (response.ok) {
+                publicReviews = await response.json();
+                lastBatchSignature = signature;
+                lastBatchResult = publicReviews;
+                lastBatchTime = Date.now();
+            }
+        } catch (e) {
+            // התעלמות במקרה של שגיאת רשת מול השרת
         }
-    } catch (e) {
-        // התעלמות במקרה של שגיאת רשת מול השרת
     }
 
     chrome.storage.local.get(itemIds, (localData) => {
@@ -178,7 +193,7 @@ async function injectItemPage() {
         if (!document.getElementById('agree-rules').checked) return alert('יש לאשר את הכללים.');
 
         chrome.runtime.sendMessage({ action: 'getAuthToken' }, async (response) => {
-            if (response.error || !response.token) return alert('חובה להתחבר עם גוגל.');
+            if (!response || response.error || !response.token) return alert('חובה להתחבר עם גוגל.');
             await sendReviewToServer(itemId, text, response.token);
         });
     });
@@ -271,7 +286,7 @@ async function loadReviews(itemId) {
 
 async function upvoteReview(itemId, reviewId) {
     chrome.runtime.sendMessage({ action: 'getAuthToken' }, async (response) => {
-        if (response.error || !response.token) {
+        if (!response || response.error || !response.token) {
             alert('חובה להתחבר כדי להצביע.');
             return;
         }
