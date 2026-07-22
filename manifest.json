@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "בקרת רכבים",
+  "version": "1.1",
+  "description": "כלי עזר מקצועי להצגת חוות דעת, ניהול הערות אישיות ומידע מהשטח על מודעות רכב.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq4TykghuU3/ouhOp0ZDffQBfdjtJU7fBFS/0CBRlRfyTYbHY/WVarTsU4OMz6f2C+Ng1QPGShfiCZNbtLxtWxgzQ9IUFsvzIZpd3nzmmhpfI9ZHv+/wJTapDmZ6b6ci6YS28pyT7Uk39o7iGLz2TxtxVJEgGt/23DeaWdcEldZhkhCjQgUn29Q2xmSCTQZ0k47q0XlDyUi7xLu7BOOUA4Y/lW9ejzTL9vHlBXgrDr/zBlDZNgCnyw5AZ4dmb3p3z5bc9ahqpiHcWTx01DkKJ2FJdZ9i+9mqxdSA13Yj8FBPdYCWCf40kHVfVoGmy74FOEeQPvS7JMCT0F76mx+liuQIDAQAB",
+  "permissions": [
+    "activeTab",
+    "identity",
+    "storage"
+  ],
+  "oauth2": {
+    "client_id": "946182525591-lh2e9nvbh974hvkifv0if1plvil9btla.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/userinfo.email"
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.yad2.co.il/*"],
+      "js": ["content.js"],
+      "css": ["style.css"]
+    }
+  ]
+}

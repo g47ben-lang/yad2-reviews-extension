@@ -1,0 +1,125 @@
+/* --- עיצוב הפאנל בתוך המודעה --- */
+#vehicle-control-panel {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 340px;
+    background: #ffffff;
+    border: 1px solid #dcdcdc;
+    border-radius: 8px;
+    z-index: 9999999;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    direction: rtl;
+}
+
+.vc-header {
+    background: #2b3a4a; /* צבע מקצועי כהה */
+    color: white;
+    padding: 12px;
+    font-weight: bold;
+    border-radius: 8px 8px 0 0;
+    text-align: center;
+    font-size: 14px;
+}
+
+.vc-body { padding: 15px; }
+
+.vc-section { margin-bottom: 10px; }
+.vc-title { font-size: 12px; font-weight: bold; color: #555; margin-bottom: 8px; }
+
+hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
+
+.vc-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
+
+.vc-btn {
+    flex: 1;
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.vc-btn.active {
+    background: #d4edda;
+    border-color: #28a745;
+    font-weight: bold;
+}
+
+.vc-btn.vc-primary {
+    background: #ff7100;
+    color: white;
+    border: none;
+    padding: 10px;
+    font-weight: bold;
+    width: 100%;
+}
+
+.vc-btn.vc-primary:hover { background: #e66600; }
+
+textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 12px;
+}
+#private-note { height: 50px; background: #fffcf0; /* צבע צהבהב להערה אישית */ }
+#new-review-text { height: 60px; }
+
+#reviews-list {
+    min-height: 50px;
+    max-height: 140px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    font-size: 12px;
+    background: #f9f9f9;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.review-item { border-bottom: 1px solid #eee; padding: 8px 0; }
+.review-item:last-child { border-bottom: none; }
+.rev-meta { font-size: 11px; margin-bottom: 4px; }
+.rev-date { color: #999; }
+.rev-text { margin-bottom: 5px; color: #333; line-height: 1.4; }
+
+.rev-actions { text-align: left; }
+.upvote-btn { background: none; border: none; color: #007bff; cursor: pointer; font-size: 10px; padding: 0; }
+.upvote-btn:hover { text-decoration: underline; }
+
+/* --- מפתח צבעים למשתמשים --- */
+.user-new { color: #6c757d; font-weight: bold; } /* אפור - תחילת דרך */
+.user-trusted { color: #17a2b8; font-weight: bold; } /* תכלת/כחול - משתמש אמין */
+.user-expert { color: #ff9900; font-weight: bold; text-shadow: 0px 0px 1px rgba(255,153,0,0.5); } /* כתום - מומחה/אמינות גבוהה */
+
+/* --- עיצוב סמלים בעמוד תוצאות החיפוש (פיד) --- */
+.v-badge-container {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.v-badge {
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.v-interesting { background: #28a745; }
+.v-irrelevant { background: #dc3545; }
+.v-public { background: #ff7100; }
+.v-private { background: #6c757d; }
