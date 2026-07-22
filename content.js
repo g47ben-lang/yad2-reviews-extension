@@ -156,6 +156,14 @@ async function injectItemPage() {
                     <label for="agree-rules" style="font-size: 11px; cursor: pointer;">המידע אמין ועומד בכללים</label>
                 </div>
                 <button id="submit-review-btn" class="vc-btn vc-primary">שלח דיווח</button>
+
+                <div id="vc-status" style="display: none;"></div>
+
+                <div id="vc-name-form" style="display: none;">
+                    <div class="vc-title">התחברות ראשונה - בחר שם תצוגה שיופיע ליד חוות הדעת שלך:</div>
+                    <input type="text" id="vc-display-name" maxlength="40" placeholder="לדוגמה: יוסי - מכונאי מהצפון">
+                    <button id="vc-name-confirm" class="vc-btn vc-primary">אישור ופרסום</button>
+                </div>
             </div>
         </div>
     `;
@@ -189,14 +197,44 @@ async function injectItemPage() {
 
     document.getElementById('submit-review-btn').addEventListener('click', async () => {
         const text = document.getElementById('new-review-text').value;
-        if(text.trim() === "") return;
-        if (!document.getElementById('agree-rules').checked) return alert('יש לאשר את הכללים.');
+        if(text.trim() === "") return showStatus('יש לכתוב תוכן לחוות הדעת');
+        if (!document.getElementById('agree-rules').checked) return showStatus('יש לאשר את הכללים לפני שליחה');
 
         chrome.runtime.sendMessage({ action: 'getAuthToken' }, async (response) => {
-            if (!response || response.error || !response.token) return alert('חובה להתחבר עם גוגל.');
+            if (!response || response.error || !response.token) return showStatus('חובה להתחבר עם חשבון גוגל כדי לפרסם');
             await sendReviewToServer(itemId, text, response.token);
         });
     });
+
+    // אישור שם תצוגה בהתחברות ראשונה (מחליף את חלונית ה-prompt)
+    document.getElementById('vc-name-confirm').addEventListener('click', submitDisplayName);
+    document.getElementById('vc-display-name').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitDisplayName();
+    });
+}
+
+// שמירת פרטי השליחה עד שהמשתמש יבחר שם תצוגה
+let pendingReview = null;
+
+async function submitDisplayName() {
+    const name = document.getElementById('vc-display-name').value.trim();
+    if (!name) return showStatus('יש להזין שם תצוגה');
+    if (!pendingReview) return;
+    document.getElementById('vc-name-form').style.display = 'none';
+    const { itemId, text, token } = pendingReview;
+    pendingReview = null;
+    await sendReviewToServer(itemId, text, token, name);
+}
+
+// הודעת סטטוס בתוך הפאנל במקום חלונות alert קופצים של הדפדפן
+function showStatus(message, type = 'error') {
+    const el = document.getElementById('vc-status');
+    if (!el) return;
+    el.textContent = message;
+    el.className = type === 'error' ? 'vc-status vc-status-error' : 'vc-status vc-status-success';
+    el.style.display = 'block';
+    clearTimeout(showStatus._timer);
+    showStatus._timer = setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
 function updateLocalData(itemId, newData) {
@@ -219,24 +257,27 @@ async function sendReviewToServer(itemId, text, token, displayName = null) {
         });
 
         if (res.status === 403) {
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (data.error === 'require_username') {
-                const name = prompt("התחברות ראשונה: בחר שם תצוגה מקצועי למערכת:");
-                if (name && name.trim() !== '') {
-                    return sendReviewToServer(itemId, text, token, name);
-                } else {
-                    alert("חובה לבחור שם תצוגה כדי לכתוב בקהילה.");
-                }
+                // פתיחת טופס בחירת שם בתוך הפאנל במקום חלונית קופצת
+                pendingReview = { itemId, text, token };
+                document.getElementById('vc-name-form').style.display = 'block';
+                document.getElementById('vc-display-name').focus();
+            } else {
+                showStatus(data.error || 'הפעולה נדחתה');
             }
         } else if (res.ok) {
             document.getElementById('new-review-text').value = '';
             document.getElementById('agree-rules').checked = false;
+            showStatus('חוות הדעת פורסמה בהצלחה', 'success');
             await loadReviews(itemId);
         } else {
-            alert('שגיאה בשמירת הנתונים.');
+            const data = await res.json().catch(() => ({}));
+            showStatus(data.error || 'שגיאה בשמירת הנתונים');
         }
     } catch (e) {
         console.error(e);
+        showStatus('בעיה בחיבור לשרת. ייתכן שהשרת מתעורר - נסה שוב בעוד כחצי דקה.');
     }
 }
 
@@ -287,24 +328,26 @@ async function loadReviews(itemId) {
 async function upvoteReview(itemId, reviewId) {
     chrome.runtime.sendMessage({ action: 'getAuthToken' }, async (response) => {
         if (!response || response.error || !response.token) {
-            alert('חובה להתחבר כדי להצביע.');
+            showStatus('חובה להתחבר עם חשבון גוגל כדי להצביע');
             return;
         }
-        
+
         try {
             const res = await fetch(`${SERVER_URL}/api/reviews/${itemId}/${reviewId}/upvote`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${response.token}` }
             });
-            
-            if (res.status === 403) {
-                const data = await res.json();
-                alert(data.error); 
-            } else if (res.ok) {
+
+            if (res.ok) {
+                showStatus('ההצבעה נקלטה, תודה!', 'success');
                 loadReviews(itemId);
+            } else {
+                const data = await res.json().catch(() => ({}));
+                showStatus(data.error || 'ההצבעה נכשלה');
             }
         } catch (e) {
             console.error(e);
+            showStatus('בעיה בחיבור לשרת');
         }
     });
 }
