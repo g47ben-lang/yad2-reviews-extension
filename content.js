@@ -10,53 +10,100 @@ setInterval(() => {
     }
 }, 800);
 
-let feedScanInterval;
+let feedObserver = null;
+let feedSafetyInterval = null;
 
 // מטמון לתוצאות batch-check כדי לא להציף את השרת בסריקות חוזרות
 let lastBatchSignature = '';
 let lastBatchResult = {};
 let lastBatchTime = 0;
 
-function init() {
-    clearInterval(feedScanInterval); 
+function isFeedPage() {
     const url = window.location.href;
-    
+    return url.includes('/vehicles/') && !url.includes('/item/');
+}
+
+function init() {
+    stopFeedWatch();
+    const url = window.location.href;
+
     if (url.includes('/item/')) {
         setTimeout(injectItemPage, 1000);
         setTimeout(injectItemPage, 2500);
     } else if (url.includes('/vehicles/')) {
-        injectFeedPage();
-        feedScanInterval = setInterval(injectFeedPage, 2000);
+        startFeedWatch();
     }
 }
 
 // עדכון חי של הסמלים בפיד במקרה של שינוי מטאב אחר
 chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && window.location.href.includes('/vehicles/')) {
-        injectFeedPage(); 
+    if (namespace === 'local' && isFeedPage()) {
+        injectFeedPage();
     }
 });
 
-async function injectFeedPage() {
-    // איתור רחב יותר של קישורי מודעות
-    const itemLinks = document.querySelectorAll('a[href*="/item/"]');
-    const itemsData = {};
+// יד 2 בנוי על React ומרנדר מחדש כרטיסים תוך כדי גלילה, מה שמוחק סמלים שהזרקנו.
+// במקום סריקה כל 2 שניות אנחנו מאזינים לשינויים ב-DOM ומזריקים מחדש מיד.
+// injectFeedPage הוא idempotent (משנה DOM רק כשמשהו באמת השתנה) כדי שלא ניצור לולאה אינסופית מול המשקיף.
+function startFeedWatch() {
+    injectFeedPage();
 
-    // שמירת מערך של קישורים עבור כל ID, לתמיכה במודעות כפולות
-    itemLinks.forEach(link => {
-        const match = link.href.match(/item\/([a-zA-Z0-9\-]+)/);
-        if (match) {
-            const id = match[1];
-            if (!itemsData[id]) itemsData[id] = [];
-            itemsData[id].push(link);
+    if (!feedObserver) {
+        const debounced = debounce(() => {
+            if (isFeedPage()) injectFeedPage();
+        }, 350);
+        feedObserver = new MutationObserver(debounced);
+        feedObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // רשת ביטחון: סריקה איטית נוספת למקרה שהמשקיף פספס משהו (לא יקר כי ההזרקה idempotent)
+    if (!feedSafetyInterval) {
+        feedSafetyInterval = setInterval(() => {
+            if (isFeedPage()) injectFeedPage();
+        }, 3000);
+    }
+}
+
+function stopFeedWatch() {
+    if (feedObserver) { feedObserver.disconnect(); feedObserver = null; }
+    if (feedSafetyInterval) { clearInterval(feedSafetyInterval); feedSafetyInterval = null; }
+}
+
+// איתור כרטיס המודעה: הקונטיינר הקטן ביותר (שאינו קישור) שמכיל תמונה.
+// זיהוי לפי התמונה עמיד יותר משמות מחלקות משתנים, ותופס את כל סוגי הכרטיסים (פרטי/סוכנות/מקודם).
+function findCard(link) {
+    let el = link.parentElement;
+    let best = null;
+    let hops = 0;
+    while (el && el !== document.body && hops < 10) {
+        if (el.tagName !== 'A' && el.querySelector('img')) {
+            // כמה מודעות שונות יש בקונטיינר הזה? כרטיס בודד מכיל בד"כ עד 3 קישורים
+            // (תמונה + כותרת + סוכנות). יותר מזה = כבר הגענו לרשימה שמכילה כמה מודעות.
+            const linkCount = el.querySelectorAll('a[href*="/item/"]').length;
+            if (linkCount <= 3) best = el; // נטפס לכרטיס הגדול ביותר ששייך למודעה אחת
+            else break;
         }
+        el = el.parentElement;
+        hops++;
+    }
+    return best || link.parentElement || link;
+}
+
+async function injectFeedPage() {
+    const itemLinks = document.querySelectorAll('a[href*="/item/"]');
+
+    // מיפוי לפי כרטיס (לא לפי קישור) - מונע כפילויות וגם מטפל במודעות שמופיעות פעמיים
+    const cards = new Map(); // cardElement -> itemId
+    itemLinks.forEach(link => {
+        const match = link.href.match(/item\/([a-zA-Z0-9-]+)/);
+        if (!match) return;
+        const card = findCard(link);
+        if (card && !cards.has(card)) cards.set(card, match[1]);
     });
 
-    const itemIds = Object.keys(itemsData);
-    if (itemIds.length === 0) return;
+    if (cards.size === 0) return;
 
-    console.log(`[בקרת רכבים] נמצאו ${itemIds.length} מזהים ייחודיים בפיד.`);
-
+    const itemIds = [...new Set(cards.values())];
     let publicReviews = {};
 
     // שליחת batch-check רק כשרשימת המודעות השתנתה או שעברה דקה - חוסך מאות בקשות לשרת
@@ -82,47 +129,47 @@ async function injectFeedPage() {
     }
 
     chrome.storage.local.get(itemIds, (localData) => {
-        itemIds.forEach(id => {
-            itemsData[id].forEach(linkEl => {
-                
-                // הסרת סמלים ישנים
-                const existingBadge = linkEl.querySelector('.v-badge-container');
-                if (existingBadge) existingBadge.remove();
+        cards.forEach((id, card) => {
+            const status = localData[id]?.status;
+            const note = localData[id]?.note;
+            const hasPublic = !!publicReviews[id];
 
-                const badgeContainer = document.createElement('div');
-                badgeContainer.className = 'v-badge-container';
-                // עיצוב שדורס כל חסימת overflow או z-index של יד 2
-                badgeContainer.style.cssText = 'position: absolute !important; top: 8px !important; right: 8px !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; gap: 6px !important; pointer-events: none !important;';
-                
-                let hasPublic = publicReviews[id];
-                let privateNote = localData[id]?.note;
-                let status = localData[id]?.status;
+            // חתימת מצב - כדי לשנות DOM רק כשמשהו באמת השתנה (שומר על idempotency מול ה-MutationObserver)
+            const stateSig = `${status || '-'}|${note && note.trim() ? '1' : '0'}|${hasPublic ? '1' : '0'}`;
+            if (card.dataset.vbadge === stateSig) return;
+            card.dataset.vbadge = stateSig;
 
-                linkEl.style.opacity = '1';
+            const existing = card.querySelector(':scope > .v-badge-container');
+            if (existing) existing.remove();
 
-                if (status === 'irrelevant') {
-                    linkEl.style.opacity = '0.3';
-                    badgeContainer.innerHTML += '<span style="background:#dc3545 !important; color:#fff !important; padding:4px 8px !important; border-radius:4px !important; font-weight:bold !important; font-size:13px !important; box-shadow:0 2px 6px rgba(0,0,0,0.6) !important; border: 1px solid white !important;">🚫 לא רלוונטי</span>';
-                } else {
-                    if (status === 'interesting') {
-                        badgeContainer.innerHTML += '<span style="background:#28a745 !important; color:#fff !important; padding:4px 8px !important; border-radius:4px !important; font-weight:bold !important; font-size:13px !important; box-shadow:0 2px 6px rgba(0,0,0,0.6) !important; border: 1px solid white !important;">⭐ מעניין</span>';
-                    }
-                    if (hasPublic) {
-                        badgeContainer.innerHTML += '<span style="background:#ff7100 !important; color:#fff !important; padding:4px 8px !important; border-radius:4px !important; font-weight:bold !important; font-size:13px !important; box-shadow:0 2px 6px rgba(0,0,0,0.6) !important; border: 1px solid white !important;">🌍 חוות דעת</span>';
-                    }
-                    if (privateNote && privateNote.trim() !== '') {
-                        badgeContainer.innerHTML += '<span style="background:#6c757d !important; color:#fff !important; padding:4px 8px !important; border-radius:4px !important; font-weight:bold !important; font-size:13px !important; box-shadow:0 2px 6px rgba(0,0,0,0.6) !important; border: 1px solid white !important;">🔒 הערה אישית</span>';
-                    }
-                }
+            const badges = [];
+            card.style.opacity = '1';
+            if (status === 'irrelevant') {
+                card.style.opacity = '0.35';
+                badges.push(feedBadge('#dc3545', '🚫 לא רלוונטי'));
+            } else {
+                if (status === 'interesting') badges.push(feedBadge('#28a745', '⭐ מעניין'));
+                if (hasPublic) badges.push(feedBadge('#ff7100', '🌍 חוות דעת'));
+                if (note && note.trim() !== '') badges.push(feedBadge('#6c757d', '🔒 הערה אישית'));
+            }
 
-                if (badgeContainer.innerHTML !== '') {
-                    linkEl.style.setProperty('position', 'relative', 'important');
-                    linkEl.style.setProperty('display', 'block', 'important');
-                    linkEl.appendChild(badgeContainer);
-                }
-            });
+            if (badges.length === 0) return;
+
+            const badgeContainer = document.createElement('div');
+            badgeContainer.className = 'v-badge-container';
+            badgeContainer.style.cssText = 'position: absolute !important; top: 8px !important; right: 8px !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; gap: 6px !important; pointer-events: none !important;';
+            badgeContainer.innerHTML = badges.join('');
+
+            if (getComputedStyle(card).position === 'static') {
+                card.style.setProperty('position', 'relative', 'important');
+            }
+            card.appendChild(badgeContainer);
         });
     });
+}
+
+function feedBadge(color, text) {
+    return `<span style="background:${color} !important; color:#fff !important; padding:4px 8px !important; border-radius:4px !important; font-weight:bold !important; font-size:13px !important; box-shadow:0 2px 6px rgba(0,0,0,0.6) !important; border:1px solid white !important; white-space:nowrap !important;">${text}</span>`;
 }
 
 async function injectItemPage() {
