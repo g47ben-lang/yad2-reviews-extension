@@ -69,36 +69,17 @@ function stopFeedWatch() {
     if (feedSafetyInterval) { clearInterval(feedSafetyInterval); feedSafetyInterval = null; }
 }
 
-// איתור כרטיס המודעה: הקונטיינר הקטן ביותר (שאינו קישור) שמכיל תמונה.
-// זיהוי לפי התמונה עמיד יותר משמות מחלקות משתנים, ותופס את כל סוגי הכרטיסים (פרטי/סוכנות/מקודם).
-function findCard(link) {
-    let el = link.parentElement;
-    let best = null;
-    let hops = 0;
-    while (el && el !== document.body && hops < 10) {
-        if (el.tagName !== 'A' && el.querySelector('img')) {
-            // כמה מודעות שונות יש בקונטיינר הזה? כרטיס בודד מכיל בד"כ עד 3 קישורים
-            // (תמונה + כותרת + סוכנות). יותר מזה = כבר הגענו לרשימה שמכילה כמה מודעות.
-            const linkCount = el.querySelectorAll('a[href*="/item/"]').length;
-            if (linkCount <= 3) best = el; // נטפס לכרטיס הגדול ביותר ששייך למודעה אחת
-            else break;
-        }
-        el = el.parentElement;
-        hops++;
-    }
-    return best || link.parentElement || link;
-}
-
+// ביד2 כל כרטיס מודעה הוא תגית <a> בפני עצמה (עם data-testid ששווה למזהה המודעה),
+// וכל הכרטיסים יושבים ישירות תחת feedListBox אחד. לכן הכרטיס = הקישור עצמו,
+// ומודעה מוקפצת שמופיעה כמה פעמים = כמה תגיות <a> נפרדות שכל אחת תקבל סמל.
 async function injectFeedPage() {
     const itemLinks = document.querySelectorAll('a[href*="/item/"]');
 
-    // מיפוי לפי כרטיס (לא לפי קישור) - מונע כפילויות וגם מטפל במודעות שמופיעות פעמיים
-    const cards = new Map(); // cardElement -> itemId
+    const cards = new Map(); // cardElement (<a>) -> itemId
     itemLinks.forEach(link => {
-        const match = link.href.match(/item\/([a-zA-Z0-9-]+)/);
-        if (!match) return;
-        const card = findCard(link);
-        if (card && !cards.has(card)) cards.set(card, match[1]);
+        // data-testid מדויק יותר מפירוק ה-href, עם נפילה חזרה ל-href אם חסר
+        const id = link.getAttribute('data-testid') || (link.href.match(/item\/([a-zA-Z0-9-]+)/) || [])[1];
+        if (id) cards.set(link, id);
     });
 
     if (cards.size === 0) return;
@@ -134,18 +115,8 @@ async function injectFeedPage() {
             const note = localData[id]?.note;
             const hasPublic = !!publicReviews[id];
 
-            // חתימת מצב - כדי לשנות DOM רק כשמשהו באמת השתנה (שומר על idempotency מול ה-MutationObserver)
-            const stateSig = `${status || '-'}|${note && note.trim() ? '1' : '0'}|${hasPublic ? '1' : '0'}`;
-            if (card.dataset.vbadge === stateSig) return;
-            card.dataset.vbadge = stateSig;
-
-            const existing = card.querySelector(':scope > .v-badge-container');
-            if (existing) existing.remove();
-
             const badges = [];
-            card.style.opacity = '1';
             if (status === 'irrelevant') {
-                card.style.opacity = '0.35';
                 badges.push(feedBadge('#dc3545', '🚫 לא רלוונטי'));
             } else {
                 if (status === 'interesting') badges.push(feedBadge('#28a745', '⭐ מעניין'));
@@ -153,10 +124,23 @@ async function injectFeedPage() {
                 if (note && note.trim() !== '') badges.push(feedBadge('#6c757d', '🔒 הערה אישית'));
             }
 
+            // חתימת המצב הרצוי. נשמרת על אלמנט הסמל עצמו כדי שאם React ימחק אותו ברינדור מחדש -
+            // נזהה שהוא נעלם ונזריק שוב. כשהמצב כבר תואם, לא נוגעים ב-DOM (idempotent, בלי לולאה מול המשקיף).
+            const desiredSig = badges.length ? `${status || '-'}|${note && note.trim() ? '1' : '0'}|${hasPublic ? '1' : '0'}` : '';
+            const existing = card.querySelector(':scope > .v-badge-container');
+            const currentSig = existing ? existing.getAttribute('data-sig') : '';
+            if (currentSig === desiredSig) return;
+
+            if (existing) existing.remove();
+
+            // שקיפות מופחתת למודעה "לא רלוונטית"
+            card.style.setProperty('opacity', status === 'irrelevant' ? '0.35' : '1', 'important');
+
             if (badges.length === 0) return;
 
             const badgeContainer = document.createElement('div');
             badgeContainer.className = 'v-badge-container';
+            badgeContainer.setAttribute('data-sig', desiredSig);
             badgeContainer.style.cssText = 'position: absolute !important; top: 8px !important; right: 8px !important; z-index: 2147483647 !important; display: flex !important; flex-direction: column !important; gap: 6px !important; pointer-events: none !important;';
             badgeContainer.innerHTML = badges.join('');
 
