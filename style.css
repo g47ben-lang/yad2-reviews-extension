@@ -1,155 +1,252 @@
-/* --- עיצוב הפאנל בתוך המודעה --- */
-#vehicle-control-panel {
+/* ============================================================
+   בקרת רכבים - ממשק כפתור צף + חלון גדול (מודאל)
+   כל הסלקטורים בתחילית vc- כדי לא להתנגש בעיצוב של יד2
+   ============================================================ */
+
+/* --- כפתור קטן צף שתמיד נוכח --- */
+#vc-launcher {
     position: fixed;
-    bottom: 20px;
-    left: 20px;
-    width: 340px;
-    background: #ffffff;
-    border: 1px solid #dcdcdc;
-    border-radius: 8px;
-    z-index: 9999999;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-    font-family: 'Segoe UI', Arial, sans-serif;
-    direction: rtl;
-}
-
-.vc-header {
-    background: #2b3a4a; /* צבע מקצועי כהה */
-    color: white;
-    padding: 12px;
-    font-weight: bold;
-    border-radius: 8px 8px 0 0;
-    text-align: center;
-    font-size: 14px;
-}
-
-.vc-body { padding: 15px; }
-
-.vc-section { margin-bottom: 10px; }
-.vc-title { font-size: 12px; font-weight: bold; color: #555; margin-bottom: 8px; }
-
-hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
-
-.vc-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
-
-.vc-btn {
-    flex: 1;
-    background: #f0f0f0;
-    border: 1px solid #ccc;
-    padding: 6px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.2s;
-}
-
-.vc-btn.active {
-    background: #d4edda;
-    border-color: #28a745;
-    font-weight: bold;
-}
-
-.vc-btn.vc-primary {
+    bottom: 22px;
+    left: 22px;
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     background: #ff7100;
-    color: white;
+    color: #fff;
     border: none;
-    padding: 10px;
-    font-weight: bold;
-    width: 100%;
+    border-radius: 999px;
+    padding: 11px 18px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    direction: rtl;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, background .2s ease;
 }
-
-.vc-btn.vc-primary:hover { background: #e66600; }
-
-textarea {
-    width: 100%;
-    box-sizing: border-box;
-    resize: none;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 8px;
-    font-family: inherit;
+#vc-launcher:hover { background: #e66600; transform: translateY(-2px); }
+.vc-launcher-emoji { font-size: 18px; line-height: 1; }
+.vc-launcher-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    background: #fff;
+    color: #ff7100;
+    border-radius: 999px;
     font-size: 12px;
-}
-#private-note { height: 50px; background: #fffcf0; /* צבע צהבהב להערה אישית */ }
-#new-review-text { height: 60px; }
-
-#reviews-list {
-    min-height: 50px;
-    max-height: 140px;
-    overflow-y: auto;
-    margin-bottom: 10px;
-    font-size: 12px;
-    background: #f9f9f9;
-    padding: 5px;
-    border-radius: 4px;
+    font-weight: 800;
 }
 
-.review-item { border-bottom: 1px solid #eee; padding: 8px 0; }
-.review-item:last-child { border-bottom: none; }
-.rev-meta { font-size: 11px; margin-bottom: 4px; }
-.rev-date { color: #999; }
-.rev-text { margin-bottom: 5px; color: #333; line-height: 1.4; }
-
-.rev-actions { text-align: left; }
-.upvote-btn { background: none; border: none; color: #007bff; cursor: pointer; font-size: 10px; padding: 0; }
-.upvote-btn:hover { text-decoration: underline; }
-
-/* --- הודעות סטטוס בתוך הפאנל (במקום חלונות קופצים) --- */
-.vc-status {
-    padding: 8px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    margin-top: 8px;
-    line-height: 1.4;
+/* --- שכבת החלון (מודאל) --- */
+#vc-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483001;
+    direction: rtl;
+    font-family: 'Segoe UI', Arial, sans-serif;
 }
-.vc-status-error { background: #fdecea; color: #b02a37; border: 1px solid #f5c2c7; }
-.vc-status-success { background: #d4edda; color: #155724; border: 1px solid #b7dfc0; }
-
-/* --- טופס בחירת שם תצוגה בהתחברות ראשונה --- */
-#vc-name-form {
-    margin-top: 10px;
-    background: #f4f7fa;
-    padding: 10px;
-    border-radius: 4px;
-    border: 1px solid #d7e0e8;
-}
-#vc-display-name {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 6px 8px;
-    margin: 6px 0;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: inherit;
-}
-
-/* --- מפתח צבעים למשתמשים --- */
-.user-new { color: #6c757d; font-weight: bold; } /* אפור - תחילת דרך */
-.user-trusted { color: #17a2b8; font-weight: bold; } /* תכלת/כחול - משתמש אמין */
-.user-expert { color: #ff9900; font-weight: bold; text-shadow: 0px 0px 1px rgba(255,153,0,0.5); } /* כתום - מומחה/אמינות גבוהה */
-
-/* --- עיצוב סמלים בעמוד תוצאות החיפוש (פיד) --- */
-.v-badge-container {
+.vc-backdrop {
     position: absolute;
-    top: 5px;
-    right: 5px;
-    z-index: 10;
+    inset: 0;
+    background: rgba(20, 28, 38, 0.55);
+    backdrop-filter: blur(2px);
+}
+.vc-card {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    background: #fff;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    animation: vc-pop .16s ease-out;
+}
+@keyframes vc-pop {
+    from { opacity: 0; transform: translate(-50%, -46%) scale(.97); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
-.v-badge {
-    padding: 3px 6px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: bold;
-    color: white;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+.vc-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #2b3a4a;
+    color: #fff;
+    padding: 15px 18px;
+}
+.vc-card-title { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.vc-card-emoji { font-size: 20px; }
+.vc-x {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    border: none;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background .2s;
+}
+.vc-x:hover { background: rgba(255,255,255,0.28); }
+
+/* --- לשוניות --- */
+.vc-tabs { display: flex; background: #f3f5f7; border-bottom: 1px solid #e3e7eb; }
+.vc-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 13px 8px;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #67727d;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s;
+}
+.vc-tab:hover { color: #2b3a4a; }
+.vc-tab.is-active { color: #ff7100; border-bottom-color: #ff7100; background: #fff; }
+
+/* --- גוף החלון --- */
+.vc-card-body { padding: 18px; overflow-y: auto; }
+.vc-label { display: block; font-size: 13px; font-weight: 700; color: #3a4650; margin: 4px 0 7px; }
+.vc-hint { font-size: 11.5px; color: #8a949d; margin-top: 8px; line-height: 1.5; }
+
+.vc-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 110px;
+    resize: vertical;
+    border: 1px solid #cdd4da;
+    border-radius: 9px;
+    padding: 11px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.vc-textarea:focus { outline: none; border-color: #ff7100; box-shadow: 0 0 0 3px rgba(255,113,0,0.15); }
+
+.vc-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 11px;
+    border: 1px solid #cdd4da;
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: 14px;
+    margin-top: 4px;
+}
+.vc-input:focus { outline: none; border-color: #ff7100; box-shadow: 0 0 0 3px rgba(255,113,0,0.15); }
+
+.vc-namebox {
+    background: #f4f7fa;
+    border: 1px solid #d7e0e8;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 14px;
 }
 
-.v-interesting { background: #28a745; }
-.v-irrelevant { background: #dc3545; }
-.v-public { background: #ff7100; }
-.v-private { background: #6c757d; }
+.vc-check { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 13px; color: #4a555f; cursor: pointer; }
+.vc-check input { width: 17px; height: 17px; cursor: pointer; accent-color: #ff7100; }
+
+.vc-primary-btn {
+    width: 100%;
+    background: #ff7100;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .2s;
+}
+.vc-primary-btn:hover { background: #e66600; }
+
+/* --- סימוני מודעה אישיים --- */
+.vc-marks { display: flex; gap: 10px; margin-bottom: 16px; }
+.vc-mark {
+    flex: 1;
+    background: #f0f2f4;
+    border: 2px solid #dbe0e5;
+    border-radius: 10px;
+    padding: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4a555f;
+    cursor: pointer;
+    transition: all .15s;
+}
+.vc-mark:hover { border-color: #b9c2ca; }
+#vc-mark-int.is-active { background: #e6f6ec; border-color: #28a745; color: #1e7e34; }
+#vc-mark-irr.is-active { background: #fdecec; border-color: #dc3545; color: #b02a37; }
+
+.vc-myname {
+    background: #eef4fb;
+    border: 1px solid #d3e2f2;
+    border-radius: 9px;
+    padding: 9px 12px;
+    font-size: 13px;
+    color: #2b3a4a;
+    margin-bottom: 14px;
+}
+
+/* --- רשימת חוות דעת --- */
+.vc-reviews { display: flex; flex-direction: column; gap: 12px; }
+.vc-empty { text-align: center; color: #8a949d; padding: 26px 12px; line-height: 1.7; font-size: 14px; }
+
+.vc-review {
+    border: 1px solid #e6e9ec;
+    border-radius: 11px;
+    padding: 13px 14px;
+    background: #fbfcfd;
+}
+.vc-review-mine { border-color: #ffd2a8; background: #fff8f1; }
+.vc-review-top { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 7px; }
+.vc-author { font-weight: 700; font-size: 13.5px; }
+.vc-review-date { color: #9aa4ac; font-size: 11.5px; margin-right: auto; }
+.vc-review-text { color: #2c353d; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.vc-review-actions { margin-top: 9px; }
+.vc-upvote {
+    background: #fff;
+    border: 1px solid #cfd6dc;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-family: inherit;
+    font-size: 12.5px;
+    color: #2b3a4a;
+    cursor: pointer;
+    transition: all .15s;
+}
+.vc-upvote:hover { border-color: #ff7100; color: #ff7100; }
+
+/* דירוג משתמשים לפי מוניטין */
+.vc-author.rank-new { color: #6c757d; }
+.vc-author.rank-trusted { color: #17a2b8; }
+.vc-author.rank-expert { color: #ff9900; }
+.vc-rank-chip { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; color: #fff; }
+.vc-rank-chip.rank-new { background: #adb5bd; }
+.vc-rank-chip.rank-trusted { background: #17a2b8; }
+.vc-rank-chip.rank-expert { background: #ff9900; }
+.vc-mine-chip { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: #ff7100; color: #fff; }
+
+/* --- הודעות סטטוס --- */
+.vc-status { padding: 10px 12px; border-radius: 9px; font-size: 13px; margin-top: 12px; line-height: 1.5; }
+.vc-status-error { background: #fdecea; color: #b02a37; border: 1px solid #f5c2c7; }
+.vc-status-success { background: #e6f6ec; color: #1e7e34; border: 1px solid #b7dfc0; }
+
+/* ============================================================
+   סמלים בעמוד תוצאות החיפוש (הפיד) - העיצוב מוזרק inline מה-JS,
+   כאן רק גיבוי בסיסי
+   ============================================================ */
+.v-badge-container { position: absolute; top: 8px; right: 8px; z-index: 2147483000; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
