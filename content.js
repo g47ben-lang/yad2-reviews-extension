@@ -156,127 +156,172 @@ function feedBadge(color, text) {
     return `<span style="background:${color} !important; color:#fff !important; padding:4px 8px !important; border-radius:4px !important; font-weight:bold !important; font-size:13px !important; box-shadow:0 2px 6px rgba(0,0,0,0.6) !important; border:1px solid white !important; white-space:nowrap !important;">${text}</span>`;
 }
 
-async function injectItemPage() {
-    if (document.getElementById('vehicle-control-panel')) return;
+// escape בסיסי לטקסט שמגיע מהשרת לפני הזרקה ל-HTML
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
-    const match = window.location.href.match(/item\/([a-zA-Z0-9\-]+)/);
+let myProfileName = null; // שם התצוגה שלי בקהילה (נשמר מקומית) - כדי לסמן "חוות הדעת שלי"
+
+async function injectItemPage() {
+    if (document.getElementById('vc-launcher')) return;
+
+    const match = window.location.href.match(/item\/([a-zA-Z0-9-]+)/);
     const itemId = match ? match[1] : null;
     if (!itemId) return;
 
-    const panel = document.createElement('div');
-    panel.id = 'vehicle-control-panel';
-    panel.innerHTML = `
-        <div class="vc-header">בקרת רכבים</div>
-        <div class="vc-body">
-            <div class="vc-section">
-                <div class="vc-title">ניהול אישי (נשמר מקומית)</div>
-                <div class="vc-buttons">
-                    <button id="btn-interesting" class="vc-btn">⭐ מעניין</button>
-                    <button id="btn-irrelevant" class="vc-btn">🚫 לא רלוונטי</button>
-                </div>
-                <textarea id="private-note" placeholder="הערות לעצמך (יישמר אוטומטית)"></textarea>
+    // כפתור קטן צף שתמיד נוכח בעמוד המודעה
+    const launcher = document.createElement('button');
+    launcher.id = 'vc-launcher';
+    launcher.type = 'button';
+    launcher.innerHTML = `
+        <span class="vc-launcher-emoji">🚗</span>
+        <span class="vc-launcher-label">בקרת רכבים</span>
+        <span class="vc-launcher-count" id="vc-launcher-count" style="display:none">0</span>`;
+    document.body.appendChild(launcher);
+
+    // החלון הגדול (מודאל) - מוסתר עד לחיצה
+    const modal = document.createElement('div');
+    modal.id = 'vc-modal';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+        <div class="vc-backdrop" data-close="1"></div>
+        <div class="vc-card" role="dialog" aria-modal="true" aria-label="בקרת רכבים">
+            <div class="vc-card-head">
+                <div class="vc-card-title"><span class="vc-card-emoji">🚗</span> בקרת רכבים</div>
+                <button class="vc-x" data-close="1" aria-label="סגירה">✕</button>
             </div>
-            <hr>
-            <div class="vc-section">
-                <div class="vc-title">מידע מהשטח (ציבורי)</div>
-                <div id="reviews-list">טוען נתונים...</div>
-                <textarea id="new-review-text" placeholder="מה הממצאים שלך על הרכב?"></textarea>
-                
-                <div style="margin-top: 5px; display: flex; align-items: center; gap: 5px;">
-                    <input type="checkbox" id="agree-rules" style="cursor: pointer;">
-                    <label for="agree-rules" style="font-size: 11px; cursor: pointer;">המידע אמין ועומד בכללים</label>
-                </div>
-                <button id="submit-review-btn" class="vc-btn vc-primary">שלח דיווח</button>
-
-                <div id="vc-status" style="display: none;"></div>
-
-                <div id="vc-name-form" style="display: none;">
-                    <div class="vc-title">התחברות ראשונה - בחר שם תצוגה שיופיע ליד חוות הדעת שלך:</div>
-                    <input type="text" id="vc-display-name" maxlength="40" placeholder="לדוגמה: יוסי - מכונאי מהצפון">
-                    <button id="vc-name-confirm" class="vc-btn vc-primary">אישור ופרסום</button>
-                </div>
+            <div class="vc-tabs">
+                <button class="vc-tab is-active" data-tab="community">חוות דעת הקהילה</button>
+                <button class="vc-tab" data-tab="write">כתיבת דיווח</button>
+                <button class="vc-tab" data-tab="personal">האזור האישי שלי</button>
             </div>
-        </div>
-    `;
-    document.body.appendChild(panel);
+            <div class="vc-card-body">
+                <section class="vc-view" data-view="community">
+                    <div id="vc-reviews-list" class="vc-reviews">טוען חוות דעת...</div>
+                </section>
 
-    chrome.storage.local.get([itemId], function(result) {
-        if (result[itemId]) {
-            if (result[itemId].note) document.getElementById('private-note').value = result[itemId].note;
-            if (result[itemId].status === 'interesting') document.getElementById('btn-interesting').classList.add('active');
-            if (result[itemId].status === 'irrelevant') document.getElementById('btn-irrelevant').classList.add('active');
-        }
-    });
+                <section class="vc-view" data-view="write" style="display:none">
+                    <div id="vc-name-box" class="vc-namebox" style="display:none">
+                        <div class="vc-label">התחברות ראשונה — בחר שם תצוגה שיופיע ליד חוות הדעת שלך:</div>
+                        <input type="text" id="vc-display-name" class="vc-input" maxlength="40" placeholder="לדוגמה: יוסי - מכונאי מהצפון">
+                    </div>
+                    <label class="vc-label" for="vc-new-review">חוות הדעת שלך על הרכב</label>
+                    <textarea id="vc-new-review" class="vc-textarea" placeholder="מה גילית על הרכב? מצב מכני, היסטוריה, התרשמות מהמוכר, אמינות המודעה..."></textarea>
+                    <label class="vc-check"><input type="checkbox" id="vc-agree"><span>המידע אמין ונכתב בתום לב, ועומד בכללי הקהילה</span></label>
+                    <button id="vc-submit" class="vc-primary-btn">פרסום חוות הדעת</button>
+                    <div id="vc-write-status" class="vc-status" style="display:none"></div>
+                </section>
 
-    document.getElementById('private-note').addEventListener('input', debounce((e) => {
-        updateLocalData(itemId, { note: e.target.value });
-    }, 500));
+                <section class="vc-view" data-view="personal" style="display:none">
+                    <div id="vc-my-name" class="vc-myname" style="display:none"></div>
+                    <div class="vc-label">סימון המודעה (נשמר במחשב שלך בלבד, לא ציבורי)</div>
+                    <div class="vc-marks">
+                        <button id="vc-mark-int" class="vc-mark">⭐ מעניין</button>
+                        <button id="vc-mark-irr" class="vc-mark">🚫 לא רלוונטי</button>
+                    </div>
+                    <label class="vc-label" for="vc-private-note">הערה אישית (רק אתה רואה אותה)</label>
+                    <textarea id="vc-private-note" class="vc-textarea" placeholder="הערות פרטיות לעצמך על הרכב הזה..."></textarea>
+                    <div class="vc-hint">נשמר אוטומטית תוך כדי הקלדה. הסימון וההערה יופיעו כסמל על המודעה בעמוד תוצאות החיפוש.</div>
+                </section>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
 
-    document.getElementById('btn-interesting').addEventListener('click', function() {
-        this.classList.toggle('active');
-        document.getElementById('btn-irrelevant').classList.remove('active');
-        updateLocalData(itemId, { status: this.classList.contains('active') ? 'interesting' : null });
-    });
+    // פתיחה / סגירה
+    launcher.addEventListener('click', () => { modal.style.display = 'block'; loadReviews(itemId); });
+    modal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => { modal.style.display = 'none'; }));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.style.display = 'none'; });
 
-    document.getElementById('btn-irrelevant').addEventListener('click', function() {
-        this.classList.toggle('active');
-        document.getElementById('btn-interesting').classList.remove('active');
-        updateLocalData(itemId, { status: this.classList.contains('active') ? 'irrelevant' : null });
-    });
-
-    await loadReviews(itemId);
-
-    document.getElementById('submit-review-btn').addEventListener('click', async () => {
-        const text = document.getElementById('new-review-text').value;
-        if(text.trim() === "") return showStatus('יש לכתוב תוכן לחוות הדעת');
-        if (!document.getElementById('agree-rules').checked) return showStatus('יש לאשר את הכללים לפני שליחה');
-
-        chrome.runtime.sendMessage({ action: 'getAuthToken' }, async (response) => {
-            if (!response || response.error || !response.token) return showStatus('חובה להתחבר עם חשבון גוגל כדי לפרסם');
-            await sendReviewToServer(itemId, text, response.token);
+    // מעבר בין לשוניות
+    modal.querySelectorAll('.vc-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            modal.querySelectorAll('.vc-tab').forEach(t => t.classList.toggle('is-active', t === tab));
+            modal.querySelectorAll('.vc-view').forEach(v => {
+                v.style.display = v.getAttribute('data-view') === tab.getAttribute('data-tab') ? 'block' : 'none';
+            });
         });
     });
 
-    // אישור שם תצוגה בהתחברות ראשונה (מחליף את חלונית ה-prompt)
-    document.getElementById('vc-name-confirm').addEventListener('click', submitDisplayName);
-    document.getElementById('vc-display-name').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') submitDisplayName();
+    // טעינת נתונים אישיים מקומיים
+    chrome.storage.local.get([itemId, 'vc_profile'], (result) => {
+        const d = result[itemId] || {};
+        if (d.note) modal.querySelector('#vc-private-note').value = d.note;
+        applyMarkUI(modal, d.status);
+        myProfileName = result.vc_profile?.displayName || null;
+        if (myProfileName) {
+            const el = modal.querySelector('#vc-my-name');
+            el.style.display = 'block';
+            el.innerHTML = `השם שלך בקהילה: <b>${esc(myProfileName)}</b>`;
+        }
     });
+
+    // הערה אישית - שמירה אוטומטית
+    modal.querySelector('#vc-private-note').addEventListener('input', debounce((e) => {
+        updateLocalData(itemId, { note: e.target.value });
+    }, 500));
+
+    // סימון מעניין / לא רלוונטי
+    modal.querySelector('#vc-mark-int').addEventListener('click', () => toggleStatus(itemId, 'interesting', modal));
+    modal.querySelector('#vc-mark-irr').addEventListener('click', () => toggleStatus(itemId, 'irrelevant', modal));
+
+    // שליחת דיווח
+    modal.querySelector('#vc-submit').addEventListener('click', () => submitReview(itemId, modal));
+    modal.querySelector('#vc-display-name').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitReview(itemId, modal);
+    });
+
+    // טעינה ראשונית של חוות הדעת (מעדכן גם את המונה על הכפתור)
+    loadReviews(itemId);
 }
 
-// שמירת פרטי השליחה עד שהמשתמש יבחר שם תצוגה
-let pendingReview = null;
-
-async function submitDisplayName() {
-    const name = document.getElementById('vc-display-name').value.trim();
-    if (!name) return showStatus('יש להזין שם תצוגה');
-    if (!pendingReview) return;
-    document.getElementById('vc-name-form').style.display = 'none';
-    const { itemId, text, token } = pendingReview;
-    pendingReview = null;
-    await sendReviewToServer(itemId, text, token, name);
+function applyMarkUI(modal, status) {
+    modal.querySelector('#vc-mark-int').classList.toggle('is-active', status === 'interesting');
+    modal.querySelector('#vc-mark-irr').classList.toggle('is-active', status === 'irrelevant');
 }
 
-// הודעת סטטוס בתוך הפאנל במקום חלונות alert קופצים של הדפדפן
-function showStatus(message, type = 'error') {
-    const el = document.getElementById('vc-status');
+function toggleStatus(itemId, status, modal) {
+    const btn = modal.querySelector(status === 'interesting' ? '#vc-mark-int' : '#vc-mark-irr');
+    const nowActive = !btn.classList.contains('is-active');
+    updateLocalData(itemId, { status: nowActive ? status : null });
+    applyMarkUI(modal, nowActive ? status : null);
+}
+
+function writeStatus(message, type = 'error') {
+    const el = document.getElementById('vc-write-status');
     if (!el) return;
     el.textContent = message;
     el.className = type === 'error' ? 'vc-status vc-status-error' : 'vc-status vc-status-success';
     el.style.display = 'block';
-    clearTimeout(showStatus._timer);
-    showStatus._timer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+    clearTimeout(writeStatus._timer);
+    writeStatus._timer = setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+function submitReview(itemId, modal) {
+    const text = modal.querySelector('#vc-new-review').value;
+    if (text.trim() === '') return writeStatus('יש לכתוב תוכן לחוות הדעת');
+    if (!modal.querySelector('#vc-agree').checked) return writeStatus('יש לאשר את כללי הקהילה לפני שליחה');
+
+    const nameBox = modal.querySelector('#vc-name-box');
+    const nameVal = modal.querySelector('#vc-display-name').value.trim();
+    const displayName = (nameBox.style.display !== 'none' && nameVal) ? nameVal : null;
+
+    chrome.runtime.sendMessage({ action: 'getAuthToken' }, async (response) => {
+        if (!response || response.error || !response.token) return writeStatus('חובה להתחבר עם חשבון גוגל כדי לפרסם');
+        await sendReviewToServer(itemId, text, response.token, displayName, modal);
+    });
 }
 
 function updateLocalData(itemId, newData) {
     chrome.storage.local.get([itemId], (result) => {
         const currentData = result[itemId] || {};
-        const updatedData = { ...currentData, ...newData };
-        chrome.storage.local.set({ [itemId]: updatedData });
+        chrome.storage.local.set({ [itemId]: { ...currentData, ...newData } });
     });
 }
 
-async function sendReviewToServer(itemId, text, token, displayName = null) {
+async function sendReviewToServer(itemId, text, token, displayName, modal) {
     try {
         const body = { text };
         if (displayName) body.displayName = displayName;
@@ -290,95 +335,104 @@ async function sendReviewToServer(itemId, text, token, displayName = null) {
         if (res.status === 403) {
             const data = await res.json().catch(() => ({}));
             if (data.error === 'require_username') {
-                // פתיחת טופס בחירת שם בתוך הפאנל במקום חלונית קופצת
-                pendingReview = { itemId, text, token };
-                document.getElementById('vc-name-form').style.display = 'block';
-                document.getElementById('vc-display-name').focus();
+                // מבקש שם תצוגה - חושף את השדה בתוך אותה לשונית
+                modal.querySelector('#vc-name-box').style.display = 'block';
+                modal.querySelector('#vc-display-name').focus();
+                writeStatus('בחר שם תצוגה ולחץ שוב על "פרסום חוות הדעת"');
             } else {
-                showStatus(data.error || 'הפעולה נדחתה');
+                writeStatus(data.error || 'הפעולה נדחתה');
             }
         } else if (res.ok) {
-            document.getElementById('new-review-text').value = '';
-            document.getElementById('agree-rules').checked = false;
-            showStatus('חוות הדעת פורסמה בהצלחה', 'success');
+            // שומרים את שם התצוגה מקומית כדי לזהות בעתיד "חוות הדעת שלי"
+            if (displayName) {
+                myProfileName = displayName;
+                chrome.storage.local.set({ vc_profile: { displayName } });
+            }
+            modal.querySelector('#vc-new-review').value = '';
+            modal.querySelector('#vc-agree').checked = false;
+            modal.querySelector('#vc-name-box').style.display = 'none';
+            writeStatus('חוות הדעת פורסמה בהצלחה', 'success');
             await loadReviews(itemId);
         } else {
             const data = await res.json().catch(() => ({}));
-            showStatus(data.error || 'שגיאה בשמירת הנתונים');
+            writeStatus(data.error || 'שגיאה בשמירת הנתונים');
         }
     } catch (e) {
         console.error(e);
-        showStatus('בעיה בחיבור לשרת. ייתכן שהשרת מתעורר - נסה שוב בעוד כחצי דקה.');
+        writeStatus('בעיה בחיבור לשרת. ייתכן שהשרת מתעורר משינה — נסה שוב בעוד כחצי דקה.');
     }
 }
 
 async function loadReviews(itemId) {
-    const list = document.getElementById('reviews-list');
+    const list = document.getElementById('vc-reviews-list');
+    if (!list) return;
     try {
         const res = await fetch(`${SERVER_URL}/api/reviews/${itemId}`);
         const reviews = await res.json();
+
+        // עדכון המונה על הכפתור הצף
+        const countEl = document.getElementById('vc-launcher-count');
+        if (countEl) {
+            countEl.textContent = reviews.length;
+            countEl.style.display = reviews.length ? 'inline-flex' : 'none';
+        }
+
         list.innerHTML = '';
         if (reviews.length === 0) {
-            list.innerHTML = '<div style="color: #888;">אין עדיין דיווחים.</div>';
+            list.innerHTML = '<div class="vc-empty">עדיין אין חוות דעת על הרכב הזה.<br>היה הראשון לדווח מהשטח דרך לשונית "כתיבת דיווח".</div>';
             return;
         }
 
         reviews.forEach(r => {
-            let userClass = 'user-new'; 
-            if (r.trustedUpvotes >= 5 && r.trustedUpvotes < 20) userClass = 'user-trusted';
-            if (r.trustedUpvotes >= 20) userClass = 'user-expert';
+            let rank = 'rank-new', rankLabel = 'משתמש חדש';
+            if (r.trustedUpvotes >= 20) { rank = 'rank-expert'; rankLabel = 'מומחה'; }
+            else if (r.trustedUpvotes >= 5) { rank = 'rank-trusted'; rankLabel = 'אמין'; }
+
+            const mine = myProfileName && r.authorName === myProfileName;
 
             const div = document.createElement('div');
-            div.className = 'review-item';
+            div.className = 'vc-review' + (mine ? ' vc-review-mine' : '');
             div.innerHTML = `
-                <div class="rev-meta">
-                    <span class="${userClass}">${r.authorName}</span> 
-                    <span class="rev-date">| ${r.timestamp}</span>
+                <div class="vc-review-top">
+                    <span class="vc-author ${rank}">${esc(r.authorName)}</span>
+                    <span class="vc-rank-chip ${rank}">${rankLabel}</span>
+                    ${mine ? '<span class="vc-mine-chip">שלך</span>' : ''}
+                    <span class="vc-review-date">${esc(r.timestamp)}</span>
                 </div>
-                <div class="rev-text">${r.text}</div>
-                <div class="rev-actions">
-                    <button class="upvote-btn" data-id="${r.id}">👍 מועיל (${r.totalVotesOnReview})</button>
-                </div>
-            `;
+                <div class="vc-review-text">${esc(r.text)}</div>
+                <div class="vc-review-actions">
+                    <button class="vc-upvote" data-id="${esc(r.id)}">👍 מועיל (${r.totalVotesOnReview})</button>
+                </div>`;
             list.appendChild(div);
         });
 
-        document.querySelectorAll('.upvote-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const reviewId = this.getAttribute('data-id');
-                upvoteReview(itemId, reviewId);
-            });
+        list.querySelectorAll('.vc-upvote').forEach(btn => {
+            btn.addEventListener('click', () => upvoteReview(itemId, btn.getAttribute('data-id')));
         });
-
-        list.scrollTop = list.scrollHeight;
-    } catch (e) { 
-        list.innerHTML = '<div style="color:red;">שגיאת רשת בטעינת נתונים ציבוריים. המידע האישי ממשיך לפעול.</div>'; 
+    } catch (e) {
+        list.innerHTML = '<div class="vc-status vc-status-error" style="display:block">שגיאת רשת בטעינת חוות הדעת. ייתכן שהשרת מתעורר משינה — נסה שוב בעוד כחצי דקה. (המידע האישי ממשיך לעבוד)</div>';
     }
 }
 
 async function upvoteReview(itemId, reviewId) {
     chrome.runtime.sendMessage({ action: 'getAuthToken' }, async (response) => {
         if (!response || response.error || !response.token) {
-            showStatus('חובה להתחבר עם חשבון גוגל כדי להצביע');
-            return;
+            return writeStatus('חובה להתחבר עם חשבון גוגל כדי להצביע');
         }
-
         try {
             const res = await fetch(`${SERVER_URL}/api/reviews/${itemId}/${reviewId}/upvote`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${response.token}` }
             });
-
             if (res.ok) {
-                showStatus('ההצבעה נקלטה, תודה!', 'success');
                 loadReviews(itemId);
             } else {
                 const data = await res.json().catch(() => ({}));
-                showStatus(data.error || 'ההצבעה נכשלה');
+                writeStatus(data.error || 'ההצבעה נכשלה');
             }
         } catch (e) {
             console.error(e);
-            showStatus('בעיה בחיבור לשרת');
+            writeStatus('בעיה בחיבור לשרת');
         }
     });
 }
